@@ -18,19 +18,19 @@
    a0 寄存器代表着函数的入参，同时也会在返回时作为出参使用，刚进入 restore 时，因为 trap_handle 入参 a0 和出参一致，所以 a0 代表着 TrapContext 的地址。.restore 用于处理完中断后回到用户态，还有内核初始化后从内核态进入到用户态。
 
     2.2. L43-L48：这几行汇编代码特殊处理了哪些寄存器？这些寄存器的的值对于进入用户态有何意义？请分别解释。
-    将 CSR 寄存器的状态存入临时寄存器后回写。
-    sstatus 寄存器：管理和控制特权级别状态。
-    比如在 S 态中，SIE 位可以设置为 0 使中断不发生，这样就避免了中断嵌套，默认情况下进入中断状态 SIE 会置为 0，同时保存到 SPIE 中，所以默认不会发生中断嵌套。
-    SPIE 记录进入 S 态之前的中断使能情况。
-    SPP 记录进入 S 态前的状态。
+    将 CSR 寄存器的状态存入临时寄存器后回写。  
+    sstatus 寄存器：管理和控制特权级别状态。  
+    比如在 S 态中，SIE 位可以设置为 0 使中断不发生，这样就避免了中断嵌套，默认情况下进入中断状态 SIE 会置为 0，同时保存到 SPIE 中，所以默认不会发生中断嵌套。  
+    SPIE 记录进入 S 态之前的中断使能情况。  
+    SPP 记录进入 S 态前的状态。  
 
-    SIE (Supervisor Interrupt Enable): 控制 S 模式中断的全局使能。
-    SPIE (Supervisor Previous Interrupt Enable): 保存上一次进入 S 模式前的中断使能状态。
-    SPP (Supervisor Previous Privilege): 保存上一次进入 S 模式前的特权级别。
+    SIE (Supervisor Interrupt Enable): 控制 S 模式中断的全局使能。  
+    SPIE (Supervisor Previous Interrupt Enable): 保存上一次进入 S 模式前的中断使能状态。  
+    SPP (Supervisor Previous Privilege): 保存上一次进入 S 模式前的特权级别。  
 
-    sepc 寄存器：保存中断发生时的指令地址，方便后续返回。
+    sepc 寄存器：保存中断发生时的指令地址，方便后续返回。  
 
-    sscratch 寄存器：用于内核栈和用户栈切换时中转存储栈顶指针 sp，因为所有通用寄存器都可能被使用，需要存储。而 sscratch 作为临时中转存储时只需要一条指令即可完成栈切换。
+    sscratch 寄存器：用于内核栈和用户栈切换时中转存储栈顶指针 sp，因为所有通用寄存器都可能被使用，需要存储。而 sscratch 作为临时中转存储时只需要一条指令即可完成栈切换。  
 
 3. L50-L56：为何跳过了 x2 和 x4？
 
