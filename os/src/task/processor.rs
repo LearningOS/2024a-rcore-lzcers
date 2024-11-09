@@ -49,6 +49,7 @@ impl Processor {
 }
 
 lazy_static! {
+    /// processor
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 
@@ -82,6 +83,31 @@ pub fn run_tasks() {
             warn!("no tasks available in run_tasks");
         }
     }
+}
+
+/// Get current task Info
+pub fn get_current_task_info() -> (usize, [u32; 500], TaskStatus) {
+    let binding = current_task().unwrap();
+    let inner = binding.inner_exclusive_access();
+    let start_time = inner.start_time;
+    let syscall_times = inner.syscall_times;
+    let status = inner.task_status;
+    (start_time, syscall_times, status)
+}
+
+/// insert frame
+pub fn insert_frame_to_current_task(start_va: VirtAddr, end_va: VirtAddr, flag: MapPermission) {
+    let binding = current_task().unwrap();
+    let mut inner = binding.inner_exclusive_access();
+    inner.memory_set.insert_framed_area(start_va, end_va, flag);
+}
+
+/// update task info
+pub fn update_current_task_sys_call_info(call_id: usize) {
+    let binding = current_task().unwrap();
+    let mut inner: core::cell::RefMut<'_, super::task::TaskControlBlockInner> =
+        binding.inner_exclusive_access();
+    inner.syscall_times[call_id] += 1;
 }
 
 /// Get current task through take, leaving a None in its place

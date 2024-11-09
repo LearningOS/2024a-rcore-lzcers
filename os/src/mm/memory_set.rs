@@ -1,9 +1,10 @@
 //! Implementation of [`MapArea`] and [`MemorySet`].
+use super::address::VPNRange;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
-use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
+use crate::mm::StepByOne;
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -50,6 +51,7 @@ impl MemorySet {
             areas: Vec::new(),
         }
     }
+
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
@@ -95,6 +97,22 @@ impl MemorySet {
             PhysAddr::from(strampoline as usize).into(),
             PTEFlags::R | PTEFlags::X,
         );
+    }
+
+    ///
+    pub fn for_spwan() -> Self {
+        let mut memory_set = Self::new_bare();
+        memory_set.map_trampoline();
+        memory_set.push(
+            MapArea::new(
+                TRAP_CONTEXT_BASE.into(),
+                TRAMPOLINE.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
+        memory_set
     }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
