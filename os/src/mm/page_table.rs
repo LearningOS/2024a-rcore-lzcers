@@ -1,4 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use core::mem;
+
+use crate::syscall::TimeVal;
+
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -8,13 +12,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// v
         const V = 1 << 0;
+        /// r
         const R = 1 << 1;
+        /// w
         const W = 1 << 2;
+        /// x
         const X = 1 << 3;
+        /// u
         const U = 1 << 4;
+        /// g
         const G = 1 << 5;
+        ///
         const A = 1 << 6;
+        ///
         const D = 1 << 7;
     }
 }
@@ -108,7 +120,7 @@ impl PageTable {
         result
     }
     /// Find PageTableEntry by VirtPageNum
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -212,4 +224,26 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// get vir_addr
+pub fn get_phys_addr_from_virt_addr(token: usize, virt_addr: usize) -> PhysAddr {
+    // 拿到页表
+    let page_table = PageTable::from_token(token);
+    let end_addr = virt_addr + mem::size_of::<TimeVal>();
+
+    let start_va = VirtAddr::from(virt_addr);
+    let mut vpn = start_va.floor();
+    let pte = page_table.translate(vpn).unwrap();
+    let ppn = pte.ppn();
+
+    vpn.step();
+    let mut end_va: VirtAddr = vpn.into();
+    end_va = end_va.min(VirtAddr::from(end_addr));
+
+    if end_va.page_offset() == 0 {
+        println!("data is splitted by two pages");
+    } else {
+    }
+    PhysAddr::from((ppn.0 << 12) + start_va.page_offset())
 }

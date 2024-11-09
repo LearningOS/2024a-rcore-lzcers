@@ -44,6 +44,7 @@ impl MemorySet {
             areas: Vec::new(),
         }
     }
+
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
@@ -89,6 +90,22 @@ impl MemorySet {
             PhysAddr::from(strampoline as usize).into(),
             PTEFlags::R | PTEFlags::X,
         );
+    }
+
+    ///
+    pub fn for_spwan() -> Self {
+        let mut memory_set = Self::new_bare();
+        memory_set.map_trampoline();
+        memory_set.push(
+            MapArea::new(
+                TRAP_CONTEXT_BASE.into(),
+                TRAMPOLINE.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
+        memory_set
     }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
