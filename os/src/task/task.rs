@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::config::{BIG_STRIDE, MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -35,6 +35,8 @@ impl TaskControlBlock {
         inner.memory_set.token()
     }
 }
+
+pub struct Stride(u64);
 
 pub struct TaskControlBlockInner {
     /// The physical page number of the frame where the trap context is placed
@@ -74,6 +76,12 @@ pub struct TaskControlBlockInner {
 
     /// syscalls
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    // stride
+    pub stride: Stride,
+
+    // pass
+    pub pass: u64,
 }
 
 impl TaskControlBlockInner {
@@ -126,6 +134,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time: 0,
+                    stride: Stride(0),
+                    pass: BIG_STRIDE / 16,
                 })
             },
         };
@@ -139,6 +149,29 @@ impl TaskControlBlock {
             trap_handler as usize,
         );
         task_control_block
+    }
+
+    /// set priority
+    pub fn set_priority(&self, prio: isize) -> isize {
+        if prio <= 1 {
+            return -1;
+        }
+        let mut inner = self.inner_exclusive_access();
+        inner.pass = BIG_STRIDE / prio as u64;
+        prio
+    }
+
+    /// get_stride
+    pub fn get_stride(&self) -> u64 {
+        let inner = self.inner_exclusive_access();
+        inner.stride.0
+    }
+
+    /// add stride
+    pub fn stride_up(&self) -> u64 {
+        let mut inner = self.inner_exclusive_access();
+        inner.stride.0 += inner.pass;
+        inner.stride.0
     }
 
     /// Load a new elf to replace the original application address space and start execution
@@ -202,6 +235,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time: 0,
+                    stride: Stride(0),
+                    pass: BIG_STRIDE / 16,
                 })
             },
         });
@@ -241,6 +276,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time: 0,
+                    stride: Stride(0),
+                    pass: BIG_STRIDE / 16,
                 })
             },
         });

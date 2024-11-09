@@ -143,33 +143,36 @@ pub fn sys_sbrk(size: i32) -> isize {
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
     println!("sys_spawn");
-    // spawn 是线程，他不需要复制进程空间的资源
+    // spawn 不需要复制进程空间的资源
     // 我们不需要拷贝地址空间，只需要创建新的 PidHandle 等信息
-    return -1;
     // 从当前进程中 spawn 一个块
     // 通过 _path 取到应用程序的数据
-    // let token = current_user_token();
-    // let path = translated_str(token, _path);
+    let token = current_user_token();
+    let path = translated_str(token, _path);
 
-    // if let Some(data) = get_app_data_by_name(path.as_str()) {
-    //     // 成功获取到 app 数据
-    //     // 创建一个 task ，此时地址空间，trap 均没有设置
-    //     let new_task = current_task().unwrap().spawn();
-    //     new_task.exec(data);
-    //     new_task.getpid() as isize
-    // } else {
-    //     -1
-    // }
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        // 成功获取到 app 数据
+        println!("get app data suscess: {:?}", _path);
+        // 创建一个 task ，此时地址空间，trap 均没有设置
+        let new_task = current_task().unwrap().spawn();
+        new_task.exec(data);
+        let pid = new_task.getpid() as isize;
+        let t_cx = new_task.inner_exclusive_access().get_trap_cx();
+        t_cx.x[10] = 0;
+        add_task(new_task);
+        pid
+    } else {
+        println!("get app data failed.");
+        -1
+    }
 }
 
 /// set
 // YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    let task = current_task().unwrap();
+    println!("set priority: {}", _prio);
+    task.set_priority(_prio)
 }
 
 /// YOUR JOB: get time with second and microsecond
@@ -185,7 +188,6 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     // TaskManager 可以拿到所有的任务以及页表
     // 如何通过页表找到物理地址？
     // 通过页表索引转换取物理地址
-
     trace!("kernel: sys_get_time");
     let phys_addr = get_phys_addr_from_virt_addr(current_user_token(), ts as usize);
     let us = get_time_us();
