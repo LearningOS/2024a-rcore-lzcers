@@ -1,18 +1,22 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str},
+    mm::{get_phys_addr_from_virt_addr, translated_ref, translated_refmut, translated_str},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
 #[repr(C)]
 #[derive(Debug)]
+///
 pub struct TimeVal {
+    ///
     pub sec: usize,
+    ///
     pub usec: usize,
 }
 
@@ -158,16 +162,25 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 }
 
 /// get_time syscall
-///
-/// YOUR JOB: get time with second and microsecond
-/// HINT: You might reimplement it with virtual memory management.
-/// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    // 问题在于如何从内核地址空间访问应用地址空间的数据
+    // 此时 ts 作为一个裸指针是一个虚拟地址
+    // 需要找到当前陷入应用的页表，将虚拟地址转换为对物理地址
+    // 如何找到陷入应用的页表？
+    // 查 satp 寄存器可以拿到当前应用的根 PPN，PPN 应该可以定位页表
+    // 但是所有的页表存在哪呢？
+    // TaskManager 可以拿到所有的任务以及页表
+    // 如何通过页表找到物理地址？
+    // 通过页表索引转换取物理地址
+    trace!("kernel: sys_get_time");
+    let phys_addr = get_phys_addr_from_virt_addr(current_user_token(), ts as usize);
+    let us = get_time_us();
+    let ts_addr = phys_addr.get_mut::<TimeVal>();
+    *ts_addr = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    0
 }
 
 /// task_info syscall

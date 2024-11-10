@@ -107,7 +107,7 @@ mod sync;
 mod thread;
 
 use fs::*;
-use process::*;
+pub use process::*;
 use sync::*;
 use thread::*;
 

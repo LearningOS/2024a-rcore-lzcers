@@ -1,4 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use core::mem;
+
+use crate::syscall::TimeVal;
+
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -273,4 +277,26 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
+
+/// get vir_addr
+pub fn get_phys_addr_from_virt_addr(token: usize, virt_addr: usize) -> PhysAddr {
+    // 拿到页表
+    let page_table = PageTable::from_token(token);
+    let end_addr = virt_addr + mem::size_of::<TimeVal>();
+
+    let start_va = VirtAddr::from(virt_addr);
+    let mut vpn = start_va.floor();
+    let pte = page_table.translate(vpn).unwrap();
+    let ppn = pte.ppn();
+
+    vpn.step();
+    let mut end_va: VirtAddr = vpn.into();
+    end_va = end_va.min(VirtAddr::from(end_addr));
+
+    if end_va.page_offset() == 0 {
+        println!("data is splitted by two pages");
+    } else {
+    }
+    PhysAddr::from((ppn.0 << 12) + start_va.page_offset())
 }

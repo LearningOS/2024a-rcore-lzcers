@@ -49,9 +49,29 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+
+    /// enable deadlock detection
+    pub deadlock_detection_flag: bool,
+    /// 资源矩阵
+    pub available: Vec<usize>,
+    /// 分配矩阵
+    pub allocation: Vec<Vec<usize>>,
+    /// 需求矩阵
+    pub need: Vec<Vec<usize>>,
+    ///
+    pub available_sm: Vec<usize>,
+    ///
+    pub allocation_sm: Vec<Vec<usize>>,
+    ///
+    pub need_sm: Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
+    /// 是否开启死锁检测
+    pub fn enable_deadlock_detection(&mut self, enable: bool) {
+        self.deadlock_detection_flag = enable;
+    }
+
     #[allow(unused)]
     /// get the address of app's page table
     pub fn get_user_token(&self) -> usize {
@@ -119,6 +139,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detection_flag: false,
+                    available: vec![],
+                    allocation: vec![Vec::new()],
+                    need: vec![Vec::new()],
+                    available_sm: vec![],
+                    allocation_sm: vec![Vec::new()],
+                    need_sm: vec![Vec::new()],
                 })
             },
         });
@@ -245,6 +272,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detection_flag: false,
+                    available: vec![],
+                    allocation: vec![Vec::new()],
+                    need: vec![Vec::new()],
+                    available_sm: vec![],
+                    allocation_sm: vec![Vec::new()],
+                    need_sm: vec![Vec::new()],
                 })
             },
         });
