@@ -19,11 +19,11 @@ use crate::{
 
 #[repr(C)]
 #[derive(Debug)]
-/// timeVal
+///
 pub struct TimeVal {
-    /// sec
+    ///
     pub sec: usize,
-    /// usec
+    ///
     pub usec: usize,
 }
 
@@ -38,27 +38,27 @@ pub struct TaskInfo {
     time: usize,
 }
 
-/// sys exit
+/// sys_exit
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("kernel:pid[{}] sys_exit", current_task().unwrap().pid.0);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
 
-/// sys yield
+///
 pub fn sys_yield() -> isize {
     //trace!("kernel: sys_yield");
     suspend_current_and_run_next();
     0
 }
 
-/// get pid
+///
 pub fn sys_getpid() -> isize {
     trace!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
     current_task().unwrap().pid.0 as isize
 }
 
-/// sys fork
+///
 pub fn sys_fork() -> isize {
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
     let current_task = current_task().unwrap();
@@ -74,7 +74,7 @@ pub fn sys_fork() -> isize {
     new_pid as isize
 }
 
-/// sys exec
+///
 pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
@@ -93,11 +93,6 @@ pub fn sys_exec(path: *const u8) -> isize {
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     //trace!("kernel: sys_waitpid");
-    trace!(
-        "kernel::pid[{}] sys_waitpid [{}]",
-        current_task().unwrap().pid.0,
-        pid
-    );
     let task = current_task().unwrap();
     // find a child process
 
