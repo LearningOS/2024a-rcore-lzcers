@@ -58,12 +58,6 @@ pub struct ProcessControlBlockInner {
     pub allocation: Vec<Vec<usize>>,
     /// 需求矩阵
     pub need: Vec<Vec<usize>>,
-    ///
-    pub available_sm: Vec<usize>,
-    ///
-    pub allocation_sm: Vec<Vec<usize>>,
-    ///
-    pub need_sm: Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
@@ -109,6 +103,12 @@ impl ProcessControlBlock {
     pub fn inner_exclusive_access(&self) -> RefMut<'_, ProcessControlBlockInner> {
         self.inner.exclusive_access()
     }
+    /// get deadlock_flag
+    pub fn get_deadlock_detect_flag(&self) -> bool {
+        let inner = self.inner.exclusive_access();
+        let flag = inner.deadlock_detection_flag;
+        flag
+    }
     /// new process from elf file
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         trace!("kernel: ProcessControlBlock::new");
@@ -143,9 +143,6 @@ impl ProcessControlBlock {
                     available: vec![],
                     allocation: vec![Vec::new()],
                     need: vec![Vec::new()],
-                    available_sm: vec![],
-                    allocation_sm: vec![Vec::new()],
-                    need_sm: vec![Vec::new()],
                 })
             },
         });
@@ -276,9 +273,6 @@ impl ProcessControlBlock {
                     available: vec![],
                     allocation: vec![Vec::new()],
                     need: vec![Vec::new()],
-                    available_sm: vec![],
-                    allocation_sm: vec![Vec::new()],
-                    need_sm: vec![Vec::new()],
                 })
             },
         });

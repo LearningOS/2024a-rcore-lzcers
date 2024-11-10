@@ -55,9 +55,6 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     let mutex_len = process_inner.available.len();
     process_inner.allocation.push(vec![0; mutex_len]);
     process_inner.need.push(vec![0; mutex_len]);
-    let sem_len = process_inner.available_sm.len();
-    process_inner.allocation_sm.push(vec![0; sem_len]);
-    process_inner.need_sm.push(vec![0; sem_len]);
 
     new_task_tid as isize
 }
