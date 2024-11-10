@@ -5,9 +5,11 @@ use super::{
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use log::debug;
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
+    inode_id: u32,
     block_id: usize,
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
@@ -17,17 +19,45 @@ pub struct Inode {
 impl Inode {
     /// Create a vfs inode
     pub fn new(
+        inode_id: u32,
         block_id: u32,
         block_offset: usize,
         fs: Arc<Mutex<EasyFileSystem>>,
         block_device: Arc<dyn BlockDevice>,
     ) -> Self {
         Self {
+            inode_id,
             block_id: block_id as usize,
             block_offset,
             fs,
             block_device,
         }
+    }
+    /// get inode_id
+    pub fn get_inode_id(&self) -> u32 {
+        self.inode_id
+    }
+
+    /// get link num
+    pub fn get_link_from_disk_node(&self, inode_id: u32) -> u32 {
+        let fs = self.fs.lock();
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+        // 修改 disk_inode 的 nlink
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .read(block_offset, |disk_inode: &DiskInode| disk_inode.get_link())
+    }
+
+    /// 获取当前 inode 的类型是不是目录
+    pub fn is_dir(&self) -> bool {
+        let is_dir = |root_inode: &DiskInode| {
+            if root_inode.is_dir() {
+                true
+            } else {
+                false
+            }
+        };
+        self.read_disk_inode(is_dir)
     }
     /// Call a function over a disk inode to read it
     fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
@@ -65,6 +95,7 @@ impl Inode {
             self.find_inode_id(name, disk_inode).map(|inode_id| {
                 let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
                 Arc::new(Self::new(
+                    inode_id,
                     block_id,
                     block_offset,
                     self.fs.clone(),
@@ -72,6 +103,10 @@ impl Inode {
                 ))
             })
         })
+    }
+    /// Find inode id
+    pub fn find_inode_id_by_name(&self, name: &str) -> Option<u32> {
+        self.read_disk_inode(|disk_inode| self.find_inode_id(name, disk_inode))
     }
     /// Increase the size of a disk inode
     fn increase_size(
@@ -90,6 +125,113 @@ impl Inode {
         }
         disk_inode.increase_size(new_size, v, &self.block_device);
     }
+    /// link
+    // 在当前目录下创建一个新的节点，指向INode
+    pub fn link(&self, name: &str, inode_id: u32) -> Option<Arc<Inode>> {
+        debug!("link!!!");
+        let is_dir = |root_inode: &DiskInode| {
+            if root_inode.is_dir() {
+                true
+            } else {
+                false
+            }
+        };
+        // 判断当前 inode 是目录节点，这样才能在之下创建文件 inode
+        if !self.read_disk_inode(is_dir) {
+            return None;
+        }
+
+        let mut fs = self.fs.lock();
+        // 简单在当前根目录的 DirEntry 中加一项指向被链接的索引 inode_id 不就行了吗？
+        // 都不用单独创建 disk_inode
+        self.modify_disk_inode(|root_inode| {
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(name, inode_id);
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+        drop(fs);
+
+        self.update_link_num(inode_id, 0);
+        block_cache_sync_all();
+        // return inode
+        Some(Arc::new(Self::new(
+            inode_id,
+            block_id,
+            block_offset,
+            self.fs.clone(),
+            self.block_device.clone(),
+        )))
+    }
+
+    /// 更新 nlink, flag 0 add 1 sub
+    pub fn update_link_num(&self, inode_id: u32, flag: u8) -> u32 {
+        let fs = self.fs.lock();
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+        // 修改 disk_inode 的 nlink
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |disk_inode: &mut DiskInode| {
+                if flag == 0 {
+                    disk_inode.add_link();
+                    debug!("add link");
+                } else if flag == 1 {
+                    disk_inode.sub_link();
+                    debug!("sub link");
+                }
+                disk_inode.get_link()
+            })
+    }
+
+    /// unlink
+    pub fn unlink(&self, name: &str) -> isize {
+        debug!("unlink!!!");
+        let is_dir = |root_inode: &DiskInode| {
+            if root_inode.is_dir() {
+                true
+            } else {
+                false
+            }
+        };
+        if !self.read_disk_inode(is_dir) {
+            return -1;
+        }
+
+        // 修改 disk_inode 的 nlink
+        self.modify_disk_inode(|root_inode| {
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            // 定位到目标 DirEntry 的偏移
+            // 创建一个空的目录项
+            let mut dirent = DirEntry::empty();
+            // 遍历所有文件项,找到对应 dirEntry 的偏移
+            for de_i in 0..file_count {
+                root_inode.read_at(DIRENT_SZ * de_i, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() == name {
+                    let inode_id = dirent.inode_id();
+                    // 更新 nlink
+                    self.update_link_num(inode_id, 1);
+                    // 直接用空项覆盖
+                    root_inode.write_at(
+                        DIRENT_SZ * de_i,
+                        DirEntry::empty().as_bytes(),
+                        &self.block_device,
+                    );
+                    return 0;
+                }
+            }
+            return -1;
+        })
+    }
+
     /// Create inode under current inode by name
     pub fn create(&self, name: &str) -> Option<Arc<Inode>> {
         let mut fs = self.fs.lock();
@@ -112,6 +254,7 @@ impl Inode {
             .modify(new_inode_block_offset, |new_inode: &mut DiskInode| {
                 new_inode.initialize(DiskInodeType::File);
             });
+
         self.modify_disk_inode(|root_inode| {
             // append file in the dirent
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
@@ -131,6 +274,7 @@ impl Inode {
         block_cache_sync_all();
         // return inode
         Some(Arc::new(Self::new(
+            new_inode_id,
             block_id,
             block_offset,
             self.fs.clone(),

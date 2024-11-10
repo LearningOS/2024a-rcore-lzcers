@@ -15,11 +15,13 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// write to the file from buf, return the number of bytes written
     fn write(&self, buf: UserBuffer) -> usize;
+    ///  get stat
+    fn stat(&self) -> Stat;
 }
 
 /// The stat of a inode
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Stat {
     /// ID of device containing file
     pub dev: u64,
@@ -46,5 +48,5 @@ bitflags! {
     }
 }
 
-pub use inode::{list_apps, open_file, OSInode, OpenFlags};
+pub use inode::{get_root_inode, list_apps, open_file, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};

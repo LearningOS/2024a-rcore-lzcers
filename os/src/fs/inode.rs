@@ -4,7 +4,7 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, Stat, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
@@ -26,17 +26,51 @@ pub struct OSInode {
 pub struct OSInodeInner {
     offset: usize,
     inode: Arc<Inode>,
+    stat: Stat,
 }
 
 impl OSInode {
     /// create a new inode in memory
     pub fn new(readable: bool, writable: bool, inode: Arc<Inode>) -> Self {
+        let inode_id = inode.get_inode_id();
+        let mode = if inode.is_dir() {
+            StatMode::DIR
+        } else {
+            StatMode::FILE
+        };
+        let nlink = inode.get_link_from_disk_node(inode_id);
         Self {
             readable,
             writable,
-            inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
+            inner: unsafe {
+                UPSafeCell::new(OSInodeInner {
+                    offset: 0,
+                    inode,
+                    stat: Stat {
+                        dev: 0,
+                        ino: inode_id as u64,
+                        mode,
+                        nlink,
+                        pad: [0; 7],
+                    },
+                })
+            },
         }
     }
+
+    /// get stat
+    pub fn get_stat(&self) -> Stat {
+        let inner = &self.inner.exclusive_access();
+        inner.stat.clone()
+    }
+    /// get link
+    /// link 记录在 disk_inode 上，因此在文件打开时无法更新，需要从磁盘中刷
+    pub fn get_nlink(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        let inode_id = inner.inode.get_inode_id();
+        inner.inode.get_link_from_disk_node(inode_id)
+    }
+
     /// read all data from the inode
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.exclusive_access();
@@ -124,6 +158,11 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+///
+pub fn get_root_inode() -> Arc<Inode> {
+    ROOT_INODE.clone()
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -154,5 +193,11 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn stat(&self) -> Stat {
+        let mut stat = self.get_stat();
+        let nlink = self.get_nlink();
+        stat.nlink = nlink;
+        stat
     }
 }
